@@ -1,6 +1,6 @@
-# Gmail Analytics
+# Unwelcome Sender
 
-A web application for analyzing your Gmail messages, providing insights into your email patterns and allowing you to browse your email history.
+Exposing senders with the audacity to email me.
 
 ## Features
 
