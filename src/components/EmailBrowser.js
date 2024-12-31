@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
+import { ChevronRight, ChevronDown } from 'lucide-react';
 
 export default function EmailBrowser() {
-  const [emails, setEmails] = useState([]);
+  const [results, setResults] = useState([]);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
   const [total, setTotal] = useState(0);
@@ -12,6 +13,7 @@ export default function EmailBrowser() {
   const [afterDate, setAfterDate] = useState('');
   const [sortBy, setSortBy] = useState('domain_frequency');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [expandedGroups, setExpandedGroups] = useState(new Set());
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -39,13 +41,76 @@ export default function EmailBrowser() {
       if (!response.ok) throw new Error('Failed to fetch emails');
       
       const data = await response.json();
-      setEmails(data.emails);
+      setResults(data.results);
       setTotal(data.total);
     } catch (err) {
       setError(err.message);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const toggleGroup = (id) => {
+    setExpandedGroups(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const renderGroupRow = (group) => {
+    const isExpanded = expandedGroups.has(group.email || group.domain);
+    const groupId = group.email || group.domain;
+
+    return (
+      <React.Fragment key={groupId}>
+        <tr 
+          className="hover:bg-gray-50 cursor-pointer"
+          onClick={() => toggleGroup(groupId)}
+        >
+          <td className="px-6 py-4 whitespace-nowrap">
+            <div className="flex items-center">
+              {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              <div className="ml-2">
+                {group.type === "sender" ? (
+                  <>
+                    <div className="text-sm font-medium text-gray-900">{group.name}</div>
+                    <div className="text-sm text-gray-500">{group.email}</div>
+                  </>
+                ) : (
+                  <div className="text-sm font-medium text-gray-900">{group.domain}</div>
+                )}
+              </div>
+            </div>
+          </td>
+          <td className="px-6 py-4 text-sm text-gray-500">
+            {group.count} emails
+          </td>
+          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+            {group.latest_date && format(new Date(group.latest_date), 'MMM d, yyyy HH:mm')}
+          </td>
+        </tr>
+        {isExpanded && group.emails.map(email => (
+          <tr key={email.id} className="bg-gray-50">
+            <td className="px-6 py-4 pl-14">
+              <div className="text-sm text-gray-900">{email.subject}</div>
+            </td>
+            <td className="px-6 py-4">
+              {group.type === "domain" && (
+                <div className="text-sm text-gray-500">{email.sender_email}</div>
+              )}
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {email.received_date && format(new Date(email.received_date), 'MMM d, yyyy HH:mm')}
+            </td>
+          </tr>
+        ))}
+      </React.Fragment>
+    );
   };
 
   const totalPages = Math.ceil(total / pageSize);
@@ -74,9 +139,9 @@ export default function EmailBrowser() {
             onChange={(e) => setSortBy(e.target.value)}
             className="pr-8 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-          <option value="domain_frequency">Domain</option>
-          <option value="sender_frequency">Sender</option>
-          <option value="date">DateDate</option>
+            <option value="domain_frequency">Domain</option>
+            <option value="sender_frequency">Sender</option>
+            <option value="date">Date</option>
           </select>
         </div>
       </div>
@@ -130,31 +195,53 @@ export default function EmailBrowser() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Sender
+                  {sortBy === "domain_frequency" ? "Domain" : "Sender"}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Subject
+                  {sortBy === "date" ? "Subject" : "Count"}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Date
+                  {sortBy === "date" ? "From Sender" : "Latest"}
                 </th>
+                {sortBy === "date" && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    From Domain
+                  </th>
+                )}
+                {sortBy === "date" && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Date
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {emails.map((email) => (
-                <tr key={email.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{email.sender_name}</div>
-                    <div className="text-sm text-gray-500">{email.sender_email}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-900">{email.subject}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {email.received_date && format(new Date(email.received_date), 'MMM d, yyyy HH:mm')}
-                  </td>
-                </tr>
-              ))}
+              {sortBy === "date" ? (
+                // Regular email rows for date sorting
+                results.map((email) => (
+                  <tr key={email.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{email.sender_name}</div>
+                      <div className="text-sm text-gray-500">{email.sender_email}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-900">{email.subject}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {email.sender_count}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {email.domain_count}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {email.received_date && format(new Date(email.received_date), 'MMM d, yyyy HH:mm')}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                // Grouped rows for sender/domain frequency
+                results.map(renderGroupRow)
+              )}
             </tbody>
           </table>
         </div>
